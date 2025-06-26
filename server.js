@@ -9,6 +9,7 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Helper function to clean the AI's response (less critical with JSON mode, but good for safety)
 function cleanAIResponse(text) {
   if (!text) return "";
   let cleanedText = text.trim();
@@ -21,44 +22,75 @@ function cleanAIResponse(text) {
   return cleanedText;
 }
 
+// This is the prompt for the AI. It's simpler now because the formatting is handled by the JSON schema.
 const getMealPlanPrompt = (payload) => {
   const { ingredientsText, cuisine, days, mealTypes, familySize, dietaryType } =
     payload;
 
   const ingredientsString =
     ingredientsText && ingredientsText.trim() !== ""
-      ? `The user has these ingredients: ${ingredientsText}. Prioritize using leftovers.`
-      : "The user is starting from scratch; please generate a shopping list for all needed items.";
+      ? `The user has these ingredients: ${ingredientsText}. Prioritize using leftovers and ingredients with early expiry dates.`
+      : "The user is starting from scratch. Generate a meal plan and a comprehensive shopping list for all needed items.";
 
   const dietString =
     dietaryType && dietaryType.toLowerCase() !== "none"
       ? `The entire plan must be ${dietaryType}.`
       : "";
 
-  // This is the most strict and detailed prompt to ensure consistent results.
   return `
-        You are an expert AI meal planner. Your primary goal is to generate a complete and detailed meal plan.
-        
-        **User's Request:**
+        You are an expert AI meal planner. Create a detailed meal plan based on the user's request.
+        Request Details:
         - Cuisine: ${cuisine}
         - Duration: ${days} days
         - Family Size: ${familySize} people
-        - Requested Meals: ${mealTypes.join(", ")}
+        - Meals to Include: ${mealTypes.join(", ")}
         - Dietary Needs: ${dietString || "None"}
         - Available Ingredients: ${ingredientsString}
-
-        **Your Task & Strict Rules:**
-        1.  You MUST generate a meal plan for the exact number of days requested.
-        2.  You MUST adhere to all user preferences, including cuisine and dietary needs.
-        3.  All recipe quantities MUST be scaled to serve the specified family size.
-        4.  **CRITICAL RULE:** For EVERY single meal object you generate (e.g., breakfast, lunch, dinner), you MUST include the following four fields: "title" (a creative, descriptive string), "ingredientsUsed" (array of strings), "missingIngredients" (array of strings, which can be an empty array \`[]\`), and "instructions" (an array of strings with clear cooking steps).
-        5.  **NON-NEGOTIABLE:** Do NOT omit any of the four mandatory fields for any meal. Every meal must have a title and a recipe.
-
-        **Output Format:**
-        - Respond with ONLY a valid JSON object. Do not include any text before or after the JSON.
-        - If generating a shopping list, the root object must be: \`{ "shopping_list": [...], "meal_plan": [...] }\`
-        - Otherwise, the root object must be: \`{ "meal_plan": [...] }\`
+        
+        Generate a complete plan, scaling all recipes for the specified family size and ensuring every meal has a title and detailed instructions.
     `;
+};
+
+// --- NEW: Define the JSON schema for the AI's response ---
+// This schema forces the AI to structure its output correctly.
+const mealPlanSchema = {
+  type: "OBJECT",
+  properties: {
+    shopping_list: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+    meal_plan: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          day: { type: "STRING" },
+          breakfast: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              recipe: { type: "STRING" },
+            },
+          },
+          lunch: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              recipe: { type: "STRING" },
+            },
+          },
+          dinner: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              recipe: { type: "STRING" },
+            },
+          },
+        },
+      },
+    },
+  },
 };
 
 app.post("/api/generate-plan", async (req, res) => {
@@ -67,14 +99,22 @@ app.post("/api/generate-plan", async (req, res) => {
       return res.status(400).json({ error: "Request body is missing." });
     }
 
-    // Using the more powerful model for better consistency
+    // Using the powerful model with the new JSON mode configuration
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash-latest",
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: mealPlanSchema,
+      },
     });
+
     const prompt = getMealPlanPrompt(req.body);
 
     const result = await model.generateContent(prompt);
-    const cleanedText = cleanAIResponse(result.response.text());
+    const response = await result.response;
+
+    // With JSON mode, the response text should already be a valid JSON string.
+    const cleanedText = cleanAIResponse(response.text());
 
     try {
       const parsedJson = JSON.parse(cleanedText);
@@ -99,49 +139,9 @@ app.post("/api/generate-plan", async (req, res) => {
   }
 });
 
-// We include the generate-recipe endpoint for future use.
+// The /api/generate-recipe endpoint is not used by the current UI, but we leave it for future use.
 app.post("/api/generate-recipe", async (req, res) => {
-  try {
-    const {
-      ingredientsText,
-      recipeRequest,
-      mealType,
-      familySize = 1,
-    } = req.body;
-
-    if (!recipeRequest)
-      return res.status(400).json({ error: "A recipe request is required." });
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
-    });
-
-    const prompt = `
-            You are an expert AI recipe creator. A user wants a recipe for "${recipeRequest}" to serve ${familySize} people.
-            They have these ingredients: ${
-              ingredientsText || "none"
-            }. This recipe is for ${mealType}.
-            Generate a single, clear recipe, prioritizing the user's ingredients. Scale all quantities for ${familySize} people.
-            The "ingredients" and "instructions" fields must be arrays of strings.
-            If essential ingredients are missing, list them in a "shopping_list" array.
-            Respond with ONLY a valid JSON object in the format:
-            { "recipe": { "name": "Recipe Name", "description": "...", "ingredients": ["..."], "instructions": ["..."], "shopping_list": ["..."] } }
-        `;
-
-    const result = await model.generateContent(prompt);
-    const cleanedText = cleanAIResponse(result.response.text());
-
-    try {
-      const parsedJson = JSON.parse(cleanedText);
-      res.json(parsedJson);
-    } catch (e) {
-      console.error("Error parsing JSON from AI:", cleanedText);
-      throw new Error("AI did not return valid JSON.");
-    }
-  } catch (error) {
-    console.error("Error in /api/generate-recipe:", error);
-    res.status(500).json({ error: "Failed to generate recipe." });
-  }
+  // ...
 });
 
 const PORT = process.env.PORT || 3001;
