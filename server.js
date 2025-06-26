@@ -75,6 +75,7 @@ const mealPlanSchema = {
               ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
               missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
+            required: ["title", "instructions"],
           },
           lunch: {
             type: "OBJECT",
@@ -84,6 +85,7 @@ const mealPlanSchema = {
               ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
               missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
+            required: ["title", "instructions"],
           },
           dinner: {
             type: "OBJECT",
@@ -93,6 +95,7 @@ const mealPlanSchema = {
               ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
               missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
+            required: ["title", "instructions"],
           },
         },
         required: ["day"],
