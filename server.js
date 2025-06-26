@@ -127,6 +127,7 @@ app.post("/api/generate-plan", async (req, res) => {
 
     try {
       const parsedJson = JSON.parse(responseText);
+      console.log("Backend sending JSON:", JSON.stringify(parsedJson, null, 2)); // Log the full JSON response
       res.json(parsedJson);
     } catch (e) {
       console.error(
