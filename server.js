@@ -47,7 +47,7 @@ const getMealPlanPrompt = (payload) => {
         - Dietary Needs: ${dietString || "None"}
         - Available Ingredients: ${ingredientsString}
         
-        Generate a complete plan, scaling all recipes for the specified family size and ensuring every meal has a title and detailed instructions.
+        Generate a complete plan, scaling all recipes for the specified family size and ensuring every meal has a title and detailed, step-by-step instructions. Instructions should be clear and comprehensive.
     `;
 };
 
