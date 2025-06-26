@@ -59,6 +59,7 @@ const mealPlanSchema = {
     shopping_list: {
       type: "ARRAY",
       items: { type: "STRING" },
+      description: "A list of ingredients the user needs to buy. Can be empty.",
     },
     meal_plan: {
       type: "ARRAY",
@@ -69,28 +70,36 @@ const mealPlanSchema = {
           breakfast: {
             type: "OBJECT",
             properties: {
-              name: { type: "STRING" },
-              recipe: { type: "STRING" },
+              title: { type: "STRING" },
+              instructions: { type: "ARRAY", items: { type: "STRING" } },
+              ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
+              missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
           },
           lunch: {
             type: "OBJECT",
             properties: {
-              name: { type: "STRING" },
-              recipe: { type: "STRING" },
+              title: { type: "STRING" },
+              instructions: { type: "ARRAY", items: { type: "STRING" } },
+              ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
+              missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
           },
           dinner: {
             type: "OBJECT",
             properties: {
-              name: { type: "STRING" },
-              recipe: { type: "STRING" },
+              title: { type: "STRING" },
+              instructions: { type: "ARRAY", items: { type: "STRING" } },
+              ingredientsUsed: { type: "ARRAY", items: { type: "STRING" } },
+              missingIngredients: { type: "ARRAY", items: { type: "STRING" } },
             },
           },
         },
+        required: ["day"],
       },
     },
   },
+  required: ["meal_plan"],
 };
 
 app.post("/api/generate-plan", async (req, res) => {
@@ -114,15 +123,15 @@ app.post("/api/generate-plan", async (req, res) => {
     const response = await result.response;
 
     // With JSON mode, the response text should already be a valid JSON string.
-    const cleanedText = cleanAIResponse(response.text());
+    const responseText = response.text();
 
     try {
-      const parsedJson = JSON.parse(cleanedText);
+      const parsedJson = JSON.parse(responseText);
       res.json(parsedJson);
     } catch (e) {
       console.error(
         "Fatal Error: AI response could not be parsed as JSON. Response was:",
-        cleanedText
+        responseText
       );
       res
         .status(500)
